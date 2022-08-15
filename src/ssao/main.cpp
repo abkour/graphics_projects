@@ -5,7 +5,7 @@
 #include <glad/glad.h>
 #include <glfw3.h>
 #include <glm.hpp>
-#include <shaderdirect.hpp>
+#include "../shaderdirect/shaderdirect.hpp"
 
 // Application headers
 #include "../common/model.hpp"
@@ -108,7 +108,4 @@ int main(int argc, const char** argv) {
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
-	
-	glfwDestroyWindow(window);
-	glfwTerminate();
 }
