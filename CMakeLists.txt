@@ -17,7 +17,7 @@ add_subdirectory(ext/glm)
 
 include_directories("ext//glad//include//")
 include_directories("ext//glfw//include//GLFW//")
-include_directories("ext//glShader//")
+include_directories("ext//shaderdirect//")
 include_directories("ext//glm//glm//")
 
 target_link_libraries(ssao debug "ext//glfw//src//Debug//glfw3")

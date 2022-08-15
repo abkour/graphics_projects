@@ -5,7 +5,7 @@
 #include <glad/glad.h>
 #include <glfw3.h>
 #include <glm.hpp>
-#include "../shaderdirect/shaderdirect.hpp"
+#include <shaderdirect.hpp>
 
 // Application headers
 #include "../common/model.hpp"
