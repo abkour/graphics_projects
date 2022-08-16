@@ -60,9 +60,16 @@ int main(int argc, const char** argv) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	GLuint tbo;
-	glGenTextures(1, &tbo);
-	glBindTexture(GL_TEXTURE_2D, tbo);
+	GLuint position_tbo;
+	glGenTextures(1, &position_tbo);
+	glBindTexture(GL_TEXTURE_2D, position_tbo);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screen_resolution.x, screen_resolution.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	GLuint normal_tbo;
+	glGenTextures(1, &normal_tbo);
+	glBindTexture(GL_TEXTURE_2D, normal_tbo);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screen_resolution.x, screen_resolution.y, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -70,11 +77,20 @@ int main(int argc, const char** argv) {
 	GLuint fbo;
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tbo, 0);
+	glBindTexture(GL_TEXTURE_2D, position_tbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, position_tbo, 0);
+	glBindTexture(GL_TEXTURE_2D, normal_tbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, normal_tbo, 0);
+	
+	unsigned int attachments[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+	glDrawBuffers(2, attachments);
+
+	glBindTexture(GL_TEXTURE_2D, depth_tbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_tbo, 0);
 	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 		std::cout << "Framebuffer not complete. Returning!\n";
 	}
+	
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	// Quad texture setup
@@ -84,7 +100,7 @@ int main(int argc, const char** argv) {
 		1.f, -1.f, 	1.f, 0.f,
 		1.f, 1.f, 	1.f, 1.f,
 
-		-1.f, -1.f, 	0.f, 0.f,
+		-1.f, -1.f, 0.f, 0.f,
 		1.f, 1.f, 	1.f, 1.f,
 		-1.f, 1.f, 	0.f, 1.f
 	};
@@ -106,6 +122,11 @@ int main(int argc, const char** argv) {
 		shader_p(GL_VERTEX_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/quadshader.glsl.vs")),
 		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/quadshader.glsl.fs"))
 	);
+	quad_shader.bind();
+	
+	int attachment_ids[] = { 0, 1 };
+	quad_shader.upload1iv(&attachment_ids[0], "tPosition");
+	quad_shader.upload1iv(&attachment_ids[1], "tNormal");
 
 	ShaderWrapper shader(
 		false,
@@ -153,9 +174,14 @@ int main(int argc, const char** argv) {
 		glDisable(GL_DEPTH_TEST);
 		glClearColor(1.f, 1.f, 1.f, 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
+
 		quad_shader.bind();
-		glBindTexture(GL_TEXTURE_2D, tbo);
-		glBindTextureUnit(0, tbo);
+		quad_shader.upload44fm(view.get_pointer(), "view");
+		quad_shader.upload44fm(glm::value_ptr(projection), "proj");
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, position_tbo);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, normal_tbo);
 		glBindVertexArray(quad_vao);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
