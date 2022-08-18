@@ -16,7 +16,7 @@ uniform mat4 proj;
 uniform vec2 screen_resolution;
 const vec2 noise_scale = screen_resolution / vec2(4.f);
 
-const float hemisphere_radius = 0.5f;
+const float hemisphere_radius = 0.25f;
 const float bias = 0.025f;
 
 void main() {

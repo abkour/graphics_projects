@@ -7,3 +7,6 @@
 [submodule "ext/shaderdirect"]
 	path = ext/shaderdirect
 	url = https://github.com/abkour/shaderdirect.git
+[submodule "shaderdirect"]
+	path = shaderdirect
+	url = https://github.com/abkour/shaderdirect.git

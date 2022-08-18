@@ -1,11 +1,12 @@
 #include "window_manager.hpp"
+#include <stdexcept>
 
 void cursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
-WindowManager::WindowManager(const glm::vec2& screen_resolution) {
+WindowManager::WindowManager(const glm::vec2& screen_resolution, const WindowMode& window_mode) {
     if (!glfwInit()) {
-        return;
+        throw std::runtime_error("[Class::WindowManager] GLFW could not be initialized!");
 	}
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -13,26 +14,46 @@ WindowManager::WindowManager(const glm::vec2& screen_resolution) {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_CENTER_CURSOR, GLFW_TRUE);
 
-    window = glfwCreateWindow(  screen_resolution.x, 
-                                screen_resolution.y, 
-                                "ssao implementation", 
-                                NULL, 
-                                NULL);
+    GLFWmonitor* primary_monitor = glfwGetPrimaryMonitor();
+    if(!primary_monitor) {
+        throw std::runtime_error("[Class::WindowManager] Couldn't identify primary monitor!");
+    }
+
+    GLFWvidmode* video_mode = const_cast<GLFWvidmode*>(glfwGetVideoMode(primary_monitor)); 
+    if(!video_mode) {
+        throw std::runtime_error("[Class::WindowManager] Couldn't identify video mode of primary monitor!");
+    }
+
+    switch(window_mode) {
+    case WindowMode::Windowed:
+        window = glfwCreateWindow(screen_resolution.x, screen_resolution.y, "Title", NULL, NULL);
+        break;
+    case WindowMode::Borderless:
+        glfwWindowHint(GLFW_RED_BITS, video_mode->redBits);
+        glfwWindowHint(GLFW_GREEN_BITS, video_mode->greenBits);
+        glfwWindowHint(GLFW_BLUE_BITS, video_mode->blueBits);
+        glfwWindowHint(GLFW_REFRESH_RATE, video_mode->refreshRate);
+        window = glfwCreateWindow(screen_resolution.x, screen_resolution.y, "Title", primary_monitor, NULL);
+        break;
+    case WindowMode::Fullscreen:
+        window = glfwCreateWindow(screen_resolution.x, screen_resolution.y, "Title", primary_monitor, NULL);
+        break;
+    default:
+        throw std::runtime_error("[Class::WindowManager] No window mode specified!");
+        break;
+    }
 
 	if (!window) {
-        window = nullptr;
-        return;
+        throw std::runtime_error("[Class::WindowManager] Window could not be created!");
 	}
 
 	glfwMakeContextCurrent(window);
 	if (glfwGetError(NULL)) {
-        window = nullptr;
-        return;
+        throw std::runtime_error("[Class::WindowManager] Window could not be made current!");
 	}
 	
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        window = nullptr;
-        return;
+        throw std::runtime_error("[Class::WindowManager] GLAD could not be loaded!");
 	}
 
     cursor = std::make_unique<Cursor>(screen_resolution.x / 2, screen_resolution.y / 2);

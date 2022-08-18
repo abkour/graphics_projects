@@ -9,13 +9,18 @@
 
 #include "movement_direction.hpp"
 
+enum class WindowMode : uint8_t {
+    None,
+    Windowed, Borderless, Fullscreen
+};
+
 class Cursor;
 
 class WindowManager {
 
 public:
 
-    WindowManager(const glm::vec2& screen_resolution);
+    WindowManager(const glm::vec2& screen_resolution, const WindowMode& window_mode);
     ~WindowManager();
 
     GLFWwindow* get_window_pointer() {

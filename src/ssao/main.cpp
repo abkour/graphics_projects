@@ -39,17 +39,31 @@ std::ostream& operator<<(std::ostream& os, const glm::vec3& vec) {
 	return os << vec.x << ", " << vec.y << ", " << vec.z;
 }
 
+void render_ssao(const char* filename);
+
 int main(int argc, const char** argv) {
-
-	if(argc != 2) {
-		std::cerr << "No obj file specified. Returning." << std::flush;
+	try {
+		if(argc != 2) {
+			std::cout << "Specify obj file!\n";
+			return -1;
+		}
+		render_ssao(argv[1]);
+	} catch(std::runtime_error& e) {
+		std::cout << "Error: " << e.what() << '\n';
+	} catch(...) {
+		std::cout << "Unexpected error somewhere!\n";
 	}
+}
 
-	glm::vec2 screen_resolution(640, 480);
-	WindowManager window_manager(screen_resolution);
+void render_ssao(const char* filename) {
+	glm::vec2 screen_resolution(1920, 1080);
+	WindowManager window_manager(screen_resolution, WindowMode::Fullscreen);
 	GLFWwindow* window = window_manager.get_window_pointer();
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	glfwSwapInterval(0);
+	//glfwSwapInterval(0);
+
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
 
 	// Quad texture setup
 	const float quad_attributes[] = 
@@ -87,7 +101,7 @@ int main(int argc, const char** argv) {
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
 
 	Model model;
-	model.parse(argv[1]);
+	model.parse(filename);
 	
 	std::vector<unsigned> vertex_indices(model.GetFaceCount());
 	for(int i = 0; i < vertex_indices.size(); ++i) {
@@ -134,10 +148,13 @@ int main(int argc, const char** argv) {
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, screen_resolution.x, screen_resolution.y, 0, GL_RGB, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 	GLuint fbo;
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	
 	glBindTexture(GL_TEXTURE_2D, position_tbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, position_tbo, 0);
 	glBindTexture(GL_TEXTURE_2D, normal_tbo);
@@ -204,8 +221,21 @@ int main(int argc, const char** argv) {
 	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(glm::vec4) * kernel.size(), kernel.data(), GL_STATIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, constant_ssbo);
 
-	if(int error = glGetError()) {
-		std::cout << std::hex << error << '\n';
+	GLuint filter_fbo;
+	glGenFramebuffers(1, &filter_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, filter_fbo);
+
+	GLuint blurred_ssao_tbo;
+	glGenTextures(1, &blurred_ssao_tbo);
+	glBindTexture(GL_TEXTURE_2D, blurred_ssao_tbo);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, screen_resolution.x, screen_resolution.y, 0, GL_RED, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, blurred_ssao_tbo, 0);
+
+	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		std::cout << "Filter Framebuffer not complete. Returning!\n";
 	}
 
 	ShaderWrapper ssao_shader(
@@ -226,12 +256,15 @@ int main(int argc, const char** argv) {
 		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/quadshader.glsl.fs"))
 	);
 	
-	if(int error = glGetError()) {
-		std::cout << "shader compile: " << std::hex << error << '\n';
-	}
+	ShaderWrapper blur_shader(
+		false,
+		shader_p(GL_VERTEX_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/box_blur.glsl.vs")),
+		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/box_blur.glsl.fs"))
+	);
+
+	int attachment_ids[] = { 0, 1, 2 };
 
 	quad_shader.bind();
-	int attachment_ids[] = { 0, 1, 2 };
 	quad_shader.upload1iv(&attachment_ids[0], "tPosition");
 	quad_shader.upload1iv(&attachment_ids[1], "tNormal");
 
@@ -240,14 +273,22 @@ int main(int argc, const char** argv) {
 	ssao_shader.upload1iv(&attachment_ids[1], "tNormal");
 	ssao_shader.upload1iv(&attachment_ids[2], "tNoise");
 
+	blur_shader.bind();
+	blur_shader.upload1iv(&attachment_ids[0], "tUnfiltered");
+
 	glm::vec3 pos(0.f, 0.f, -1.f);
 	glm::vec3 target(0.f);
 	ViewTransform view(pos, target);
 	glm::mat4 projection = glm::perspective(glm::radians(45.f), screen_resolution.x / screen_resolution.y, 0.1f, 1000.f);
 
-	if(int error = glGetError()) {
-		std::cout << std::hex << error << '\n';
-	}
+
+	//
+	// Loop invariant setup
+	g_shader.bind();
+	g_shader.upload44fm(glm::value_ptr(projection), "perspective_projection");
+
+
+	float g_shader_time = 0.f;
 
 	float delta_time = 0.f;
 	float last_time = 0.f;
@@ -255,6 +296,7 @@ int main(int argc, const char** argv) {
 		delta_time = glfwGetTime() - last_time;
 		last_time += delta_time;
 
+		//
 		// Handle potential user input
 		auto mouse_delta = window_manager.get_mouse_delta();
 		if(mouse_delta.x != 0.f || mouse_delta.y != 0.f) {
@@ -267,11 +309,12 @@ int main(int argc, const char** argv) {
 			view.translate(movement_direction, delta_time);
 		}
 
+		float start = glfwGetTime();
+
 		//
 		// Render to framebuffer
 		g_shader.bind();
 		g_shader.upload44fm(view.get_pointer(), "view_transform");
-		g_shader.upload44fm(glm::value_ptr(projection), "perspective_projection");
 		
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 		glEnable(GL_DEPTH_TEST);
@@ -280,9 +323,8 @@ int main(int argc, const char** argv) {
 		glBindVertexArray(vao);
 		glDrawElements(GL_TRIANGLES, vertex_indices.size(), GL_UNSIGNED_INT, 0);
 		
-		if(int error = glGetError()) {
-			std::cout << "Prepass stage: " << std::hex << error << '\n';
-		}
+		float end = glfwGetTime() - start;
+		std::cout << "scene pass: " << end * 1000 << "ms\n";
 
 		//
 		// SSAO shader
@@ -305,9 +347,15 @@ int main(int argc, const char** argv) {
 		glBindVertexArray(quad_vao);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
-		if(int error = glGetError()) {
-			std::cout << "SSAO stage: " << std::hex << error << '\n';
-		}
+		// Blur SSAO output
+		blur_shader.bind();
+		glBindFramebuffer(GL_FRAMEBUFFER, filter_fbo);
+		glClearColor(0.f, 0.f, 0.f, 0.f);
+		glClear(GL_COLOR_BUFFER_BIT);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, ambient_tbo);
+		glBindVertexArray(quad_vao);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		//
 		// Render final quad
@@ -317,15 +365,27 @@ int main(int argc, const char** argv) {
 
 		quad_shader.bind();
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, ambient_tbo);
+		glBindTexture(GL_TEXTURE_2D, blurred_ssao_tbo);
 		glBindVertexArray(quad_vao);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
-
-		if(int error = glGetError()) {
-			std::cout << "Quad stage: " << std::hex << error << '\n';
-		}
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
+
+	glDeleteVertexArrays(1, &vao);
+	glDeleteVertexArrays(1, &quad_vao);
+	glDeleteBuffers(1, &ebo);
+	glDeleteBuffers(1, &vbo);
+	glDeleteBuffers(1, &quad_vbo);
+	glDeleteBuffers(1, &constant_ssbo);
+	glDeleteTextures(1, &depth_tbo);
+	glDeleteTextures(1, &noise_tbo);
+	glDeleteTextures(1, &normal_tbo);
+	glDeleteTextures(1, &ambient_tbo);
+	glDeleteTextures(1, &position_tbo);
+	glDeleteTextures(1, &blurred_ssao_tbo);
+	glDeleteFramebuffers(1, &fbo);	
+	glDeleteFramebuffers(1, &ssao_fbo);	
+	glDeleteFramebuffers(1, &filter_fbo);
 }
