@@ -1,8 +1,8 @@
 #version 460 core
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
-layout(location = 0) out vec3 viewPosition;
-layout(location = 1) out vec3 normal;
+layout(location = 2) out vec3 viewPosition;
+layout(location = 3) out vec3 normal;
 
 uniform mat4 perspective_projection;
 uniform mat4 view_transform;

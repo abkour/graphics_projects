@@ -40,6 +40,7 @@ std::ostream& operator<<(std::ostream& os, const glm::vec3& vec) {
 }
 
 void render_ssao(const char* filename);
+void performance_testbed(const char* filename);
 
 int main(int argc, const char** argv) {
 	try {
@@ -60,7 +61,7 @@ void render_ssao(const char* filename) {
 	WindowManager window_manager(screen_resolution, WindowMode::Fullscreen);
 	GLFWwindow* window = window_manager.get_window_pointer();
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	//glfwSwapInterval(0);
+	glfwSwapInterval(0);
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
@@ -126,6 +127,10 @@ void render_ssao(const char* filename) {
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(sizeof(float) * 3));
 	
+	GLuint fbo;
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
 	GLuint depth_tbo;
 	glGenTextures(1, &depth_tbo);
 	glBindTexture(GL_TEXTURE_2D, depth_tbo);
@@ -151,20 +156,13 @@ void render_ssao(const char* filename) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	GLuint fbo;
-	glGenFramebuffers(1, &fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	
-	glBindTexture(GL_TEXTURE_2D, position_tbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, position_tbo, 0);
-	glBindTexture(GL_TEXTURE_2D, normal_tbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, normal_tbo, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_tbo, 0);
 	
 	unsigned int attachments[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
 	glDrawBuffers(2, attachments);
 
-	glBindTexture(GL_TEXTURE_2D, depth_tbo);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_tbo, 0);
 	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 		std::cout << "Framebuffer not complete. Returning!\n";
 	}
@@ -210,7 +208,6 @@ void render_ssao(const char* filename) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ambient_tbo, 0);
-
 	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 		std::cout << "SSAO Framebuffer not complete. Returning!\n";
 	}
@@ -233,16 +230,9 @@ void render_ssao(const char* filename) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, blurred_ssao_tbo, 0);
-
 	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 		std::cout << "Filter Framebuffer not complete. Returning!\n";
 	}
-
-	ShaderWrapper ssao_shader(
-		false,
-		shader_p(GL_VERTEX_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/ssao_shader.glsl.vs")),
-		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/ssao_shader.glsl.fs"))
-	);
 
 	ShaderWrapper g_shader(
 		false,
@@ -250,16 +240,22 @@ void render_ssao(const char* filename) {
 		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/g_shader.glsl.fs"))
 	);
 
-	ShaderWrapper quad_shader(
+	ShaderWrapper ssao_shader(
 		false,
-		shader_p(GL_VERTEX_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/quadshader.glsl.vs")),
-		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/quadshader.glsl.fs"))
+		shader_p(GL_VERTEX_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/ssao_shader.glsl.vs")),
+		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/ssao_shader.glsl.fs"))
 	);
-	
+
 	ShaderWrapper blur_shader(
 		false,
 		shader_p(GL_VERTEX_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/box_blur.glsl.vs")),
 		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/box_blur.glsl.fs"))
+	);
+
+	ShaderWrapper quad_shader(
+		false,
+		shader_p(GL_VERTEX_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/quadshader.glsl.vs")),
+		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/quadshader.glsl.fs"))
 	);
 
 	int attachment_ids[] = { 0, 1, 2 };
@@ -281,12 +277,13 @@ void render_ssao(const char* filename) {
 	ViewTransform view(pos, target);
 	glm::mat4 projection = glm::perspective(glm::radians(45.f), screen_resolution.x / screen_resolution.y, 0.1f, 1000.f);
 
-
 	//
 	// Loop invariant setup
 	g_shader.bind();
 	g_shader.upload44fm(glm::value_ptr(projection), "perspective_projection");
-
+	ssao_shader.bind();
+	ssao_shader.upload44fm(glm::value_ptr(projection), "proj");
+	ssao_shader.upload2fv(glm::value_ptr(screen_resolution), "screen_resolution");
 
 	float g_shader_time = 0.f;
 
@@ -309,10 +306,10 @@ void render_ssao(const char* filename) {
 			view.translate(movement_direction, delta_time);
 		}
 
-		float start = glfwGetTime();
-
 		//
 		// Render to framebuffer
+		float start = glfwGetTime();
+
 		g_shader.bind();
 		g_shader.upload44fm(view.get_pointer(), "view_transform");
 		
@@ -329,44 +326,29 @@ void render_ssao(const char* filename) {
 		//
 		// SSAO shader
 		ssao_shader.bind();
-		ssao_shader.upload44fm(glm::value_ptr(projection), "proj");
-		ssao_shader.upload2fv(glm::value_ptr(screen_resolution), "screen_resolution");
-
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, position_tbo);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, normal_tbo);
-		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, noise_tbo);
-
+		glBindTextureUnit(0, position_tbo);
+		glBindTextureUnit(1, normal_tbo);
+		glBindTextureUnit(2, noise_tbo);
 		glBindFramebuffer(GL_FRAMEBUFFER, ssao_fbo);
 		glDisable(GL_DEPTH_TEST);
-		glClearColor(1.f, 0.f, 0.f, 1.f);
+		glClearColor(0.f, 0.f, 0.f, 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, constant_ssbo);
 		glBindVertexArray(quad_vao);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
+		//
 		// Blur SSAO output
 		blur_shader.bind();
 		glBindFramebuffer(GL_FRAMEBUFFER, filter_fbo);
-		glClearColor(0.f, 0.f, 0.f, 0.f);
-		glClear(GL_COLOR_BUFFER_BIT);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, ambient_tbo);
-		glBindVertexArray(quad_vao);
+		glBindTextureUnit(0, ambient_tbo);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		//
 		// Render final quad
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glClearColor(0.f, 0.f, 0.f, 1.f);
-		glClear(GL_COLOR_BUFFER_BIT);
-
 		quad_shader.bind();
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, blurred_ssao_tbo);
-		glBindVertexArray(quad_vao);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glBindTextureUnit(0, blurred_ssao_tbo);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		glfwSwapBuffers(window);
@@ -388,4 +370,84 @@ void render_ssao(const char* filename) {
 	glDeleteFramebuffers(1, &fbo);	
 	glDeleteFramebuffers(1, &ssao_fbo);	
 	glDeleteFramebuffers(1, &filter_fbo);
+}
+
+void performance_testbed(const char* filename) {
+	glm::vec2 screen_resolution(1920, 1080);
+	WindowManager window_manager(screen_resolution, WindowMode::Fullscreen);
+	GLFWwindow* window = window_manager.get_window_pointer();
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwSwapInterval(0);
+
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
+
+	Model model;
+	model.parse(filename);
+	
+	std::vector<unsigned> vertex_indices(model.GetFaceCount());
+	for(int i = 0; i < vertex_indices.size(); ++i) {
+		vertex_indices[i] = model.GetFace(i).p;
+	}
+
+	auto interleaved_attributes = model.GetInterleavedAttributes();
+
+	GLuint ebo, vao, vbo;
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(1, &vbo);
+	glBindVertexArray(vao);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, interleaved_attributes.size() * sizeof(float), interleaved_attributes.data(), GL_STATIC_DRAW);
+	
+	glGenBuffers(1, &ebo);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, vertex_indices.size() * sizeof(unsigned), vertex_indices.data(), GL_STATIC_DRAW);
+
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), 0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(sizeof(float) * 3));
+
+	ShaderWrapper perf_shader(
+		false,
+		shader_p(GL_VERTEX_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/perf.glsl.vs")),
+		shader_p(GL_FRAGMENT_SHADER, ROOT_DIRECTORY + std::string("/src/ssao/perf.glsl.fs"))
+	);
+	perf_shader.bind();
+
+	glm::vec3 pos(0.f, 0.f, -1.f);
+	glm::vec3 target(0.f);
+	ViewTransform view(pos, target);
+	glm::mat4 projection = glm::perspective(glm::radians(45.f), screen_resolution.x / screen_resolution.y, 0.1f, 1000.f);
+
+	perf_shader.upload44fm(glm::value_ptr(projection), "proj");
+
+
+	float delta_time = 0.f, last_time = 0.f;
+	while(glfwWindowShouldClose(window)) {
+		glClearColor(0.f, 0.f, 0.f, 0.f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		delta_time = glfwGetTime() - last_time;
+		last_time += delta_time;
+		printf("delta_time: %f\n", delta_time);
+
+		//
+		// Handle potential user input
+		auto mouse_delta = window_manager.get_mouse_delta();
+		if(mouse_delta.x != 0.f || mouse_delta.y != 0.f) {
+			view.rotate(mouse_delta);
+			window_manager.reset_mouse_delta();
+		}
+
+		auto movement_direction = window_manager.get_movement_direction();
+		if(movement_direction != MovementDirection::None) {
+			view.translate(movement_direction, delta_time);
+		}
+
+		glDrawElements(GL_TRIANGLES, vertex_indices.size(), GL_UNSIGNED_INT, 0);
+
+		glfwSwapBuffers(window);
+		glfwPollEvents();
+	}
 }
