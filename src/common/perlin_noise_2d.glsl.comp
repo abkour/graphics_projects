@@ -1,0 +1,62 @@
+#version 450 core
+
+layout(local_size_x = 256) in;
+
+layout(std430, binding = 0) buffer buf0
+{
+    vec2 gradients[];
+};
+
+layout(std430, binding = 1) buffer buf1
+{
+    float perlin_output[];
+};
+
+uniform uint nGlobalShaderInvocations;
+uniform vec2 texture_dim;
+uniform vec2 grid_dim;
+
+void main() {
+    int id = int(gl_GlobalInvocationID.x);
+
+    if(id >= nGlobalShaderInvocations) {
+        return;
+    }
+    
+    const vec2 cell_size = texture_dim / grid_dim;
+
+    int x_coord = id % int(texture_dim.x);
+    int y_coord = id / int(texture_dim.x);
+
+    // <-- so far correct
+
+    const vec2 cell = vec2(x_coord / int(cell_size.x), y_coord / int(cell_size.y));
+    const int cell_id = int(cell.x) + int(cell.y) * int(grid_dim.x);
+
+    vec2 grad_bl = gradients[cell_id];
+    vec2 grad_br = gradients[cell_id + 1];
+    vec2 grad_tl = gradients[cell_id + int(grid_dim.x) + 1];
+    vec2 grad_tr = gradients[cell_id + int(grid_dim.x) + 2];
+
+    float fractional_cell_pos_x = float(x_coord % int(cell_size.x)) / cell_size.x;
+    float fractional_cell_pos_y = float(y_coord % int(cell_size.y)) / cell_size.y;
+
+    vec2 id_xy = cell + vec2(fractional_cell_pos_x, fractional_cell_pos_y);
+
+    vec2 off_bl = id_xy - cell;
+    vec2 off_br = id_xy - vec2(cell.x + 1.f, cell.y);
+    vec2 off_tl = id_xy - vec2(cell.x, cell.y + 1.f);
+    vec2 off_tr = id_xy - vec2(cell.x + 1.f, cell.y + 1.f);
+
+    float dot_bl = dot(grad_bl, off_bl);
+    float dot_br = dot(grad_br, off_br);
+    float dot_tl = dot(grad_tl, off_tl);
+    float dot_tr = dot(grad_tr, off_tr);
+
+    float l0 = mix(dot_bl, dot_br, fractional_cell_pos_x);
+    float l1 = mix(dot_tl, dot_tr, fractional_cell_pos_x);
+    float l2 = mix(l0, l1, fractional_cell_pos_y);
+
+    //perlin_output[id] = ;
+    perlin_output[id] = (l2 + 1.f) * 0.5f;
+}

@@ -1,0 +1,19 @@
+#version 450 core 
+layout(local_size_x = 256) in;
+layout(std430, binding = 0) buffer buf0 
+{
+    vec4 output_positions[];
+};
+
+uniform vec2 grid_size;
+uniform vec2 cell_size;
+uniform vec3 origin;
+
+void main() {
+    int id = int(gl_GlobalInvocationID.x);
+    const vec2 pos = vec2(id % int(grid_size.x), id / int(grid_size.y));
+    output_positions[id] = vec4(origin.x + cell_size.x * pos.x, 
+                                0.f, 
+                                origin.z + cell_size.y * pos.y,
+                                0.f);
+}

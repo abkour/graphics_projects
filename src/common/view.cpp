@@ -7,6 +7,7 @@ ViewTransform::ViewTransform(const glm::vec3& origin, const glm::vec3& target)
     , pitch(0.f)
     , yaw(-89.f)
 {
+    dir = normalize(dir);
     view_transform = glm::lookAt(pos, pos + dir, glm::vec3(0.f, 1.f, 0.f));
 }
 
@@ -29,23 +30,26 @@ void ViewTransform::rotate(glm::vec2 screen_off) {
 }
 
 void ViewTransform::translate(MovementDirection movement_direction, float delta_time) {
-	static const float movementSpeed = 5.f;
     switch (movement_direction) {
 	case MovementDirection::Forward:
-		pos += dir * delta_time * movementSpeed;
+		pos += dir * delta_time * movement_speed;
 		break;
 	case MovementDirection::Backward:
-		pos -= dir * delta_time * movementSpeed;
+		pos -= dir * delta_time * movement_speed;
 		break;
 	case MovementDirection::Left:
-		pos -= glm::cross(dir, glm::vec3(0.f, 1.f, 0.f)) * delta_time * movementSpeed;
+		pos -= glm::cross(dir, glm::vec3(0.f, 1.f, 0.f)) * delta_time * movement_speed;
 		break;
 	case MovementDirection::Right:
-		pos += glm::cross(dir, glm::vec3(0.f, 1.f, 0.f)) * delta_time * movementSpeed;
+		pos += glm::cross(dir, glm::vec3(0.f, 1.f, 0.f)) * delta_time * movement_speed;
 		break;
 	default:
 		break;
 	}
 
     view_transform = glm::lookAt(pos, pos + dir, glm::vec3(0.f, 1.f, 0.f));
+}
+
+void ViewTransform::set_movement_scale(float new_speed) {
+    movement_speed = new_speed;
 }

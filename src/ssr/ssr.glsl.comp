@@ -1,0 +1,118 @@
+#version 450 core
+layout(local_size_x = 256) in;
+layout(std430, binding = 0) buffer buf0 
+{
+    vec4 output_color[];
+};
+
+const int MAX_NUMBER_OF_BINARY_SEARCH_STEPS = 100;
+const int MAX_NUMBER_OF_STEPS = 100;
+
+uniform float far_clip_distance;
+uniform mat4 proj;
+uniform mat4 inv_proj;
+uniform mat4 view;
+uniform mat4 inv_view;
+uniform vec2 screen_resolution;
+uniform ivec2 tex_dimension;
+uniform sampler2D tColor;
+uniform sampler2D tNormal;
+uniform sampler2D tDepth;
+uniform sampler2D tRefl;
+
+vec2 computeUV(int id) {
+    float x = float(id % tex_dimension.x) + 0.5f;
+    float y = float(id / tex_dimension.x) + 0.5f;
+    return vec2(x / float(tex_dimension.x), y / float(tex_dimension.y));
+}
+
+vec3 computeViewRay(vec2 uv) {
+    vec2 clip_uv = uv * 2.f - 1.f;
+    return vec3(inv_proj * vec4(clip_uv, 1.f, 1.f));
+}
+
+vec3 computePositionVS(vec2 uv, vec3 ray_dir) {
+    float depth = texture(tDepth, uv).r;
+    return ray_dir * depth;
+}
+
+vec3 binary_search_depth(vec3 pos_vs, vec3 dir) {
+    const float step = 0.5f;
+    for(int i = 0; i < MAX_NUMBER_OF_BINARY_SEARCH_STEPS; ++i) {
+        dir *= step;
+        vec4 pos_cs = proj * vec4(pos_vs, 1.f);
+        pos_cs.xy /= pos_cs.w;
+        pos_cs.xy = pos_cs.xy * 0.5f + 0.5f;
+
+        float depth_vs = texture(tDepth, pos_cs.xy).r;
+        float delta = depth_vs - pos_vs.z;
+
+        if(delta < 0.f) {
+            pos_vs += dir;
+        } else {
+            pos_vs -= dir;
+        }
+    }
+    vec4 pos_cs = proj * vec4(pos_vs, 1.f);
+    pos_cs.xy /= pos_cs.w;
+    pos_cs.xy = pos_cs.xy * 0.5f + 0.5f;
+
+    return texture(tColor, pos_cs.xy).xyz;
+}
+
+vec3 ray_march(vec3 pos_vs, vec3 dir, float step) {
+
+    // Intersection position is pos_vs
+    // Ray equation: r(t) = o + t * d
+    // Conversely, rz(t) = oz + t  * dz
+    // t = (rz(t) - oz) / dz
+
+    // Convert pos_vs to NDC
+    
+
+/*
+    dir *= step;
+    for(int i = 0; i < MAX_NUMBER_OF_STEPS; ++i) {
+        pos_vs += dir;
+        vec4 pos_ts = proj * vec4(pos_vs, 1.f);
+        pos_ts.xy /= pos_ts.w;
+        pos_ts.xy = pos_ts.xy * 0.5f + 0.5f;
+
+        if(min(pos_ts.x, pos_ts.y) < -1.f || max(pos_ts.x, pos_ts.y) > 1.f) {
+            continue;
+        }
+
+        float depth_sample = texture(tDepth, pos_ts.xy).r;
+        float delta = depth_sample - pos_vs.z;
+        if(delta < 0.f) {
+            return texture(tColor, pos_ts.xy).xyz;
+        }
+    }
+    return vec3(0.f);
+*/
+}
+
+void main() {
+    int id = int(gl_GlobalInvocationID.x);
+    if(id > tex_dimension.x * tex_dimension.y) return;
+
+    vec2 uv = computeUV(id);
+
+    vec3 view_ray = computeViewRay(uv);
+    vec3 ray_dir = normalize(view_ray);
+
+    float step = 0.05f;
+    vec3 normal_ws = texture(tNormal, uv).xyz;
+    vec3 normal_vs = normalize(vec3(view * vec4(normal_ws, 1.f)));
+    vec3 refl_dir = reflect(ray_dir, normal_vs);
+    
+    vec3 pos_vs = computePositionVS(uv, ray_dir);
+    vec3 refl_color = ray_march(pos_vs, refl_dir, step);
+
+    int refl_v = int(texture(tRefl, uv).r);
+    if(refl_v == 0) {
+        output_color[id] = vec4(refl_color, 1.f);
+    } else {
+        output_color[id] = vec4(0.f, 1.f, 1.f, 1.f);
+    }
+}

@@ -1,0 +1,44 @@
+#version 450 core
+layout(local_size_x = 128) in;
+
+struct PointMass {
+    float lastx, lasty;
+    float x, y;
+    float pinx, piny;
+}; // 24 bytes
+
+struct Link {
+    uint attachment_index0;
+    uint attachment_index1;
+}; // 8 bytes
+
+// 
+//
+// Input
+layout(std430, binding = 0) buffer input0
+{
+    PointMass point_masses[];
+};
+
+layout(std430, binding = 1) buffer input1 
+{
+    Link links[];
+};
+
+layout(std430, binding = 2) buffer input2
+{
+    uint link_counts[];
+    uint link_offsets[];
+};
+
+//
+//
+// Output
+layout(std430, binding = 3) buffer output0
+{
+
+};
+
+void main() {
+
+}

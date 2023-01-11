@@ -1,0 +1,29 @@
+#version 450 core 
+
+layout(isolines, equal_spacing, ccw) in;
+
+out float width;
+out float height;
+
+uniform float time;
+
+//quad interpol
+vec4 interpolate(in vec4 v0, in vec4 v1, in vec4 v2, in vec4 v3) {
+    vec4 a = mix(v0, v1, gl_TessCoord.x);
+    vec4 b = mix(v3, v2, gl_TessCoord.x);
+    return mix(a, b, gl_TessCoord.y);
+}
+
+void main() { 
+    vec2 a = gl_in[0].gl_Position.xy;
+    vec2 b = gl_in[1].gl_Position.xy;
+    float px = mix(a.x, b.x, gl_TessCoord.x);
+
+    float py = gl_TessCoord.y * 2.f - 1.f;
+    //float py = gl_TessCoord.y;
+
+    height = px * px + py * cos(time);
+    width = px;
+    gl_Position = vec4(px, height, 0.f, 1.f);
+    //gl_Position = vec4(px, py, 0.f, 1.f);
+}

@@ -1,0 +1,24 @@
+Frustum culling:
+
+Frustum normals:
+    1. Near
+    2. Far
+    3. Left
+    4. Right
+    5. Bottom
+    6. Top
+
+Given variables: FOV, distance to near/far plane (abbreviated as near_d and far_d)
+
+near_h := tan(a) * near_d * 2;
+far_h  := tan(a) * far_d * 2;
+
+near_w := aspect_ratio * near_h;
+far_w := aspect_ratio * far_h;
+
+near_normal := camera_direction
+far_normal := -camera_direction;
+
+half_far_h = far_h / 2.f 
+half_far_w = far_w / 2.f 
+

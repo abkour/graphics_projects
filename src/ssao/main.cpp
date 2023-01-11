@@ -9,6 +9,7 @@
 #include <shaderdirect.hpp>
 
 // Application headers
+#include "../common/logfile.hpp"
 #include "../common/model.hpp"
 #include "../common/view.hpp"
 #include "../common/window_manager.hpp"
@@ -50,9 +51,9 @@ int main(int argc, const char** argv) {
 		}
 		render_ssao(argv[1]);
 	} catch(std::runtime_error& e) {
-		std::cout << "Error: " << e.what() << '\n';
+		std::cerr << "Error: " << e.what() << std::flush;
 	} catch(...) {
-		std::cout << "Unexpected error somewhere!\n";
+		std::cerr << "Unexpected error somewhere!" << std::flush;
 	}
 }
 
@@ -289,9 +290,25 @@ void render_ssao(const char* filename) {
 
 	float delta_time = 0.f;
 	float last_time = 0.f;
+
+	int loop_iter = 0;
+	constexpr int nLabels = 6;
+	constexpr int expected_number_of_entries = 1000;
+	std::vector<std::vector<float>> log_entries(nLabels);
+	for(int i = 0; i < nLabels; ++i) {
+		log_entries[i].resize(expected_number_of_entries);
+	}
+
+	LogFile logfile("logs/ssao_frametime.cvs");
+	logfile.write_line("Frame_time Scene_Render SSAO_Pass Blur_Pass Quad_Pass Buffer_Swap");
+
+	std::cout << std::flush;
+
 	while(!glfwWindowShouldClose(window)) {
 		delta_time = glfwGetTime() - last_time;
 		last_time += delta_time;
+
+		log_entries[0].push_back(delta_time * 1000.f);
 
 		//
 		// Handle potential user input
@@ -308,8 +325,8 @@ void render_ssao(const char* filename) {
 
 		//
 		// Render to framebuffer
-		float start = glfwGetTime();
 
+		float start = glfwGetTime();
 		g_shader.bind();
 		g_shader.upload44fm(view.get_pointer(), "view_transform");
 		
@@ -319,12 +336,12 @@ void render_ssao(const char* filename) {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glBindVertexArray(vao);
 		glDrawElements(GL_TRIANGLES, vertex_indices.size(), GL_UNSIGNED_INT, 0);
-		
 		float end = glfwGetTime() - start;
-		std::cout << "scene pass: " << end * 1000 << "ms\n";
+		log_entries[1].push_back(end * 1000.f);
 
 		//
 		// SSAO shader
+		start = glfwGetTime();
 		ssao_shader.bind();
 		glBindTextureUnit(0, position_tbo);
 		glBindTextureUnit(1, normal_tbo);
@@ -336,23 +353,41 @@ void render_ssao(const char* filename) {
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, constant_ssbo);
 		glBindVertexArray(quad_vao);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
+		end = glfwGetTime() - start;
+		log_entries[2].push_back(end * 1000.f);
 
 		//
 		// Blur SSAO output
+		start = glfwGetTime();
 		blur_shader.bind();
 		glBindFramebuffer(GL_FRAMEBUFFER, filter_fbo);
 		glBindTextureUnit(0, ambient_tbo);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
-
+		end = glfwGetTime() - start;
+		log_entries[3].push_back(end * 1000.f);
+		
 		//
 		// Render final quad
+		start = glfwGetTime();
 		quad_shader.bind();
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glBindTextureUnit(0, blurred_ssao_tbo);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
+		end = glfwGetTime() - start;
+		log_entries[4].push_back(end * 1000.f);
 
+		start = glfwGetTime();
 		glfwSwapBuffers(window);
 		glfwPollEvents();
+		end = glfwGetTime() - start;
+		log_entries[5].push_back(end * 1000.f);
+
+		loop_iter++;
+	}
+
+	logfile.write_raw(reinterpret_cast<char*>(&loop_iter), sizeof(int));
+	for(auto& log_entry : log_entries) {
+		logfile.write_raw(reinterpret_cast<char*>(log_entry.data()), loop_iter * sizeof(float));
 	}
 
 	glDeleteVertexArrays(1, &vao);
@@ -430,7 +465,7 @@ void performance_testbed(const char* filename) {
 
 		delta_time = glfwGetTime() - last_time;
 		last_time += delta_time;
-		printf("delta_time: %f\n", delta_time);
+		printf("frame time: %fms\n", delta_time * 1000.f);
 
 		//
 		// Handle potential user input

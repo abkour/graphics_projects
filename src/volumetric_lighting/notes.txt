@@ -1,0 +1,13 @@
+Intuition:
+
+The question we are trying to answer is:
+What fragments are illuminated by the light source?
+This question implicitly assumes that the light source has already illuminated the scene.
+To achieve this we use a shadow map. 
+To determine which fragments are illuminated by the light source, we need to determine if 
+the fragment is within the volume encapsulated by the light source (we assume directional lighting).
+
+One way we can achieve that is by performing a ray trace from the fragment to the light source. 
+The problem with this approach is that we require information about the objects in the scene, 
+which is not suited for fragment shaders.
+

@@ -1,0 +1,74 @@
+Implementation:
+
+There are two ways to simulate fluids:
+
+    - Grid based
+    - Particle based 
+
+There is another method that was introduced later called the Lattice-Boltzmann method, but I won't 
+cover that one for now.
+
+Grid based simulations are typically more accurate, but also more expensive, whereas 
+particle based simulations are less accurate, but also less expensive.
+
+Fluids can be simulated from 2 viewports, the Lagrangian or Eulerian viewport.
+In the Lagrangian viewpoint, we simulate fluids as discrete blobs of particles that possess
+mass, velocity etc. The benefit of this approach is that conservation of mass is 
+easily obtained.
+In the Eulerian viewpoint, we look at fixed points in the fluid and track quantities such 
+as density and velocity of the fluid. 
+The Lagrangian viewpoint is implemented in the particle simulation, whereas the Eulerian 
+viewpoint is implemented by the grid-based methods.
+
+Before we go any further, we need to understand vector calculus.
+
+Vector calculus.
+
+The following three operators are essential to vector calculus:
+    1. The gradient
+    2. The divergence
+    3. The curl
+
+1. Gradient
+The gradient simply takes all the spatial partial derivates of the function and returns a vector.
+It is often used to approximate a function locally.
+
+We can evaluate the directional derivate of the function using the gradient operator.
+
+Occasionally, we will take the gradient of a vector valued function resulting in a matrix, that 
+is sometimes called the jacobian.
+
+2. Divergence 
+This operator only applies to vector fields and tells us how much the vectors are converging/diverging
+at one point.
+Note the input is a vector and the output a scalar. 
+
+3. Curl 
+This operator tells us how much a vector field is rotating around a given point.
+The curl is a way of measuring how fast (and in three dimensions along what axis) a vector field is 
+rotating locally. A vector field whose curl is zero is called curl-free, or irrotational.
+
+There are other operators.
+
+4. Laplacian 
+This operator is usually formed as the divergence of the gradient.
+
+
+Let's talk about the algorithm for solving the fluid flow problem
+
+1. Choosing a timestep
+
+We need a timestep that is as large as possible without creating numerical instability.
+The CFL(Courant-Friedrichs-Lewy) condition helps us do that.
+The CFL condition states that we need to choose delta_t to be small enough, so that any
+quantity that is moved along the velocity field is moving at most delta_h distance.
+This delta_t can therefore expressed as:
+
+    delta_t = delta_h / u_max.
+
+This requires knowledge of the maximum velocity of the velocity field. This quantity can 
+be acquired by either performing a linear search through the velocity field or by keeping 
+track of the maximum velocity.
+
+However, you can use a timestep larger than the one prescribed by the CFL condition, when 
+highly accurate results are not required.

@@ -14,12 +14,13 @@ uniform sampler2D tNoise;
 uniform mat4 proj;
 
 uniform vec2 screen_resolution;
-const vec2 noise_scale = screen_resolution / vec2(4.f);
+vec2 noise_scale = screen_resolution / vec2(4.f);
 
 const float hemisphere_radius = 0.25f;
 const float bias = 0.025f;
 
 void main() {
+
     vec3 fragment_position = texture(tPosition, uv).xyz;
     vec3 normal = normalize(texture(tNormal, uv).xyz);
     vec3 random_vec = normalize(texture(tNoise, uv * noise_scale).xyz);
